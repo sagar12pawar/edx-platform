@@ -11,6 +11,7 @@ not possible to have this LTI multiple times on a single page in LMS.
 
 import base64
 import hashlib
+import os
 import textwrap
 import urllib
 from uuid import uuid4
@@ -21,6 +22,10 @@ import requests
 from django.conf import settings
 from http import StubHttpRequestHandler, StubHttpService
 from oauthlib.oauth1.rfc5849 import parameters, signature
+
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class StubLtiHandler(StubHttpRequestHandler):
@@ -61,22 +66,18 @@ class StubLtiHandler(StubHttpRequestHandler):
         # Respond to request with correct lti endpoint
         elif self._is_correct_lti_request():
             params = {k: v for k, v in self.post_dict.items() if k != 'oauth_signature'}
-
             if self._check_oauth_signature(params, self.post_dict.get('oauth_signature', "")):
                 status_message = "This is LTI tool. Success."
-
                 # Set data for grades what need to be stored as server data
                 if 'lis_outcome_service_url' in self.post_dict:
                     self.server.grade_data = {
                         'callback_url': self.post_dict.get('lis_outcome_service_url').replace('https', 'http'),
                         'sourcedId': self.post_dict.get('lis_result_sourcedid')
                     }
-
-                host = getattr(settings, 'LETTUCE_HOST', self.server.server_address[0])
+                host = os.environ.get('BOK_CHOY_HOSTNAME', self.server.server_address[0])
                 submit_url = '//{}:{}'.format(host, self.server.server_address[1])
                 content = self._create_content(status_message, submit_url)
                 self.send_response(200, content)
-
             else:
                 content = self._create_content("Wrong LTI signature")
                 self.send_response(200, content)
@@ -291,13 +292,11 @@ class StubLtiHandler(StubHttpRequestHandler):
 
         """
         client_secret = unicode(self.server.config.get('client_secret', self.DEFAULT_CLIENT_SECRET))
-
-        host = getattr(settings, 'LETTUCE_HOST', '127.0.0.1')
+        host = os.environ.get('BOK_CHOY_HOSTNAME', '127.0.0.1')
         port = self.server.server_address[1]
         lti_base = self.DEFAULT_LTI_ADDRESS.format(host=host, port=port)
         lti_endpoint = self.server.config.get('lti_endpoint', self.DEFAULT_LTI_ENDPOINT)
         url = lti_base + lti_endpoint
-
         request = mock.Mock()
         request.params = [(unicode(k), unicode(v)) for k, v in params.items()]
         request.uri = unicode(url)
