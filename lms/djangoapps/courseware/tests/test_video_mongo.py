@@ -814,7 +814,7 @@ class TestGetHtmlMethod(BaseTestXmodule):
 
         mocked_get_video.side_effect = side_effect
 
-        SOURCE_XML = """
+        SOURCE_XML = u"""
             <video show_captions="true"
             display_name="A Name"
             sub="a_sub_file.srt.sjson" source="{source}"
