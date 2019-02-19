@@ -758,11 +758,15 @@ def _get_xsscommitlint_count(filename):
 
 @task
 @needs('pavelib.prereqs.install_python_prereqs')
+@cmdopts([
+    ("report-dir=", "r", "Directory in which to put PII reports, defaults to reports/pii_report/"),
+])
 @timed
 def run_pii_check(options):  # pylint: disable=unused-argument
     """
     Guarantee that all Django models are PII-annotated.
     """
+    report_dir = getattr(options, 'report_dir', u'reports/pii_report/')
     for env_name, env_settings_file in (("CMS", "cms.envs.test"), ("LMS", "lms.envs.test")):
         try:
             print()
@@ -771,8 +775,8 @@ def run_pii_check(options):  # pylint: disable=unused-argument
             sh(
                 "export DJANGO_SETTINGS_MODULE={}; "
                 "code_annotations django_find_annotations "
-                "--config_file .pii_annotations.yml --report_path pii_report/ "
-                "--lint --report --coverage".format(env_settings_file)
+                "--config_file .pii_annotations.yml --report_path {} "
+                "--lint --report --coverage".format(env_settings_file, report_dir)
             )
 
         except BuildFailure as error_message:
