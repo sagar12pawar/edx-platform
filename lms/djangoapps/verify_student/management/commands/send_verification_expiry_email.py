@@ -90,6 +90,7 @@ class Command(BaseCommand):
         batch_size = options['batch_size']
         sleep_time = options['sleep_time']
         days = options['days_range']
+        dry_run = options['dry_run']
 
         # If email was sent and user did not re-verify then this date will be used as the criteria for resending email
         date_resend_days_ago = datetime.now(UTC) - timedelta(days=resend_days)
@@ -99,7 +100,7 @@ class Command(BaseCommand):
         # Adding an order_by() clause will override the class meta ordering as we don't need ordering here
         query = SoftwareSecurePhotoVerification.objects.filter(Q(status='approved') &
                                                                (Q(expiry_date__date__gte=start_date.date(),
-                                                                expiry_date__lt=datetime.now(UTC)) |
+                                                                  expiry_date__date__lt=datetime.now(UTC).date()) |
                                                                 Q(expiry_email_date__lt=date_resend_days_ago)
                                                                 )).order_by()
 
@@ -111,9 +112,6 @@ class Command(BaseCommand):
                         "date range {} - {}".format(start_date.date(), datetime.now(UTC).date()))
             return
 
-        if total_verification < batch_size:
-            batch_size = total_verification
-
         logger.info("For the date range {} - {}, total Software Secure Photo verification filtered are {}"
                     .format(start_date.date(), datetime.now(UTC).date(), total_verification))
 
@@ -124,26 +122,28 @@ class Command(BaseCommand):
                 batch_verifications.append(verification)
 
                 if len(batch_verifications) == batch_size:
-                    if not options['dry_run']:
-                        send_verification_expiry_email(batch_verifications)
-                        time.sleep(sleep_time)
-                    else:
-                        logger.info(
-                            "This was a dry run, no email was sent. For the actual run email would have been sent "
-                            "to {} learner(s)".format(len(batch_verifications))
-                        )
-                    total_verification = total_verification - batch_size
-                    if total_verification < batch_size:
-                        batch_size = total_verification
+                    send_verification_expiry_email(batch_verifications, dry_run)
+                    time.sleep(sleep_time)
                     batch_verifications = []
 
+        # If selected verification in batch are less than batch_size
+        if batch_verifications:
+            send_verification_expiry_email(batch_verifications, dry_run)
 
-def send_verification_expiry_email(batch_verifications):
+
+def send_verification_expiry_email(batch_verifications, dry_run=False):
     """
     Spins a task to send verification expiry email to the learners in the batch using edx_ace
     If the email is successfully sent change the expiry_email_date to reflect when the
     email was sent
     """
+    if dry_run:
+        logger.info(
+            "This was a dry run, no email was sent. For the actual run email would have been sent "
+            "to {} learner(s)".format(len(batch_verifications))
+        )
+        return
+
     site = Site.objects.get(name=settings.SITE_NAME)
     message_context = get_base_template_context(site)
     message_context.update({
