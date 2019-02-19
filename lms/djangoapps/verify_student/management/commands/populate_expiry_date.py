@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models import F
 from util.query import use_read_replica_if_available
 
 from lms.djangoapps.verify_student.models import SoftwareSecurePhotoVerification
@@ -67,7 +68,8 @@ class Command(BaseCommand):
             return
 
         distinct_user_ids = []
-        updated_verification_count = 0
+        update_verification_ids = []
+        update_verification_count = 0
 
         for verification in sspv:
             if verification.user_id not in distinct_user_ids:
@@ -75,14 +77,25 @@ class Command(BaseCommand):
 
                 recent_verification = self.find_recent_verification(sspv, verification.user_id)
                 if not recent_verification.expiry_date:
-                    recent_verification_qs = SoftwareSecurePhotoVerification.objects.filter(pk=recent_verification.pk)
-                    recent_verification_qs.update(expiry_date=recent_verification.updated_at + timedelta(
-                        days=settings.VERIFY_STUDENT["DAYS_GOOD_FOR"]))
-                    updated_verification_count += 1
+                    update_verification_ids.append(recent_verification.pk)
+                    update_verification_count += 1
 
-                if updated_verification_count == batch_size:
-                    updated_verification_count = 0
+                if update_verification_count == batch_size:
+                    self.bulk_update(update_verification_ids)
+                    update_verification_count = 0
+                    update_verification_ids = []
                     time.sleep(sleep_time)
+
+        if update_verification_ids:
+            self.bulk_update(update_verification_ids)
+
+    def bulk_update(self, verification_ids):
+        """
+        It updates the expiry_date for all the verification whose ids lie in verification_ids
+        """
+        recent_verification_qs = SoftwareSecurePhotoVerification.objects.filter(pk__in=verification_ids)
+        recent_verification_qs.update(expiry_date=F('updated_at') + timedelta(
+            days=settings.VERIFY_STUDENT["DAYS_GOOD_FOR"]))
 
     def find_recent_verification(self, model, user_id):
         """
