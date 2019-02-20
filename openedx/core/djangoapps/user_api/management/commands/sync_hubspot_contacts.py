@@ -176,7 +176,9 @@ class Command(BaseCommand):
             self.stderr.write(message)
 
     def add_arguments(self, parser):
-
+        """
+        Definition of arguments this command accepts
+        """
         parser.add_argument(
             '--initial-sync-days',
             default=7,
